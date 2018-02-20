@@ -4,49 +4,49 @@ import pandas as pd
 #======================Time Series Tool 时间序列工具==================================
 def ts_mean(data,n):
     data=pd.DataFrame(data)
-    return np.array(data.rolling(window=n).mean())
+    return np.array(data.rolling(window=n).mean().values[:,0])
 
 def ts_std(data,n):
     data=pd.DataFrame(data)
-    return np.array(data.rolling(window=n).std())
+    return np.array(data.rolling(window=n).std().values[:,0])
 
 def ts_max(data,n):
     data=pd.DataFrame(data)
-    return np.array(data.rolling(window=n).max())
+    return np.array(data.rolling(window=n).max().values[:,0])
 
 def ts_min(data,n):
     data=pd.DataFrame(data)
-    return np.array(data.rolling(window=n).min())
+    return np.array(data.rolling(window=n).min().values[:,0])
 
 def ts_skew(data,n):
     data=pd.DataFrame(data)
-    return np.array(data.rolling(window=n).skew())
+    return np.array(data.rolling(window=n).skew().values[:,0])
 
 
 def ts_kurt(data,n):
     data=pd.DataFrame(data)
-    return np.array(data.rolling(window=n).kurt())
+    return np.array(data.rolling(window=n).kurt().values[:,0])
 
 def ts_mid(data,n):
     data=pd.DataFrame(data)
-    return np.array(data.rolling(window=n).median())
+    return np.array(data.rolling(window=n).median().values[:,0])
 
 def ts_quantile(data,n,alpha):
     data=pd.DataFrame(data)
-    return np.array(data.rolling(window=n).quantile(alpha))
+    return np.array(data.rolling(window=n).quantile(alpha).values[:,0])
 
 def ts_retn(data,n):
     data=pd.DataFrame(data)
-    return np.array(data/(data.rolling(window=n).sum()-data.rolling(window=n-1).sum()))
+    return np.array((data/(data.rolling(window=n).sum()-data.rolling(window=n-1).sum())).values[:,0])
 
 def ts_delay(data,n):
     data=pd.DataFrame(data)
-    return np.array(data-data.diff(n))
+    return np.array(data.shift(n).values[:,0])
 
 def ts_corr(data1,data2,n):
     r1=pd.DataFrame(data1).rolling(window=n)
     r2=pd.DataFrame(data2).rolling(window=n)
-    return np.array(r1.corr(r2))
+    return np.array(r1.corr(r2).values[:,0])
 
 
 #======================Cross Section 横截面工具==================================
@@ -74,7 +74,11 @@ def cs_max(data):
 def cs_min(data):
     return np.array(list(np.min(data,axis=1))*len(data.columns)).reshape((len(data.columns),len(data.index))).T
 
-
+def cs_cuttail(data,a,b):
+    data=cs_percent(data)
+    data[data<=a]=0
+    data[data>=b]=0
+    return np.array(data)
 
 
 #======================数据框==================================
@@ -94,3 +98,10 @@ def df_replace_zero(data):
 def df_replace_nan(data,number):
     data[np.isnan(data)]=number
     return np.array(data)
+
+def df_power(data,n):
+    data=np.array(data)
+    return data**n
+
+def df_abs(data):
+    return np.array(np.abs(data))

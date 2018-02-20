@@ -1,8 +1,8 @@
-import numpy as np
-import pandas as pd
 from Information import *
-from Function import *
+from StockFunction import *
+from FutureFunction import *
 import matplotlib.pyplot as plt
+import datetime
 
 
 
@@ -66,15 +66,18 @@ class StrategyBacktest:
         self.position=alpha.div(np.sum(alpha,axis=1),axis=0)*self.start_money
         self.position=self.position-self.position.diff(1)
         self.position.iloc[0] = self.start_money/len(self.column)
+        all_expense=self.commission*np.abs(self.position.diff(1)[1:].values)
+        all_gross=self.position[:-1].values*self.open[1:].values/self.open[:-1].values
         self.expense=pd.DataFrame(np.sum(self.commission*np.abs(self.position.diff(1)[1:].values),axis=1), index=alpha.index[1:])
         self.gross = pd.DataFrame(np.sum(self.position[:-1].values*self.open[1:].values/self.open[:-1].values,axis=1)-self.start_money, index=alpha.index[1:])
         self.pnl=self.gross-self.expense
+        # self.IC = pd.DataFrame(np.array(pd.DataFrame((all_gross - all_expense).T).corrwith(pd.DataFrame(alpha.T.values)).iloc[:-1]),index=alpha.index[:-1])
         self.accumulate=np.cumsum(self.pnl)
         self.maxdrawdown_value=[]
         self.maxdrawdown_percent = []
         accu=self.accumulate.values[:,0]
         for t in range(len(accu)-2):
-            i = t+np.argmax(np.maximum.accumulate(accu[t:t+6]) - accu[t:t+6])  # end of the period
+            i = t+np.argmax(np.maximum.accumulate(accu[t:t+3]) - accu[t:t+3])  # end of the period
             j = t+np.argmax(accu[t:i+1])
             self.maxdrawdown_value.append((accu[j] - accu[i]) )
             self.maxdrawdown_percent.append((accu[j] - accu[i]) /(self.start_money))
@@ -86,7 +89,7 @@ class StrategyBacktest:
         self.maxdrawdown_percent = pd.DataFrame(self.maxdrawdown_percent, index=alpha.index[1:])
 
         self.turnover=np.sum(np.abs(self.position.diff(1)/self.start_money),axis=1)
-        self.turnover.iloc[0]=0
+        self.turnover[0]=0
         years = np.arange(self.pnl.index[0].year, self.pnl.index[-1].year + 1)
         self.conclude = pd.DataFrame(0.0, index=years, columns=['retn', 'sharpe', 'maxdd','tovr'])
 
@@ -97,14 +100,17 @@ class StrategyBacktest:
                         (self.pnl[str(year)].values / self.start_money).std() * np.sqrt(len(self.pnl[str(year)])))
             self.conclude.loc[year]['maxdd'] =self.maxdrawdown_value[str(year)].max()/self.start_money
             self.conclude.loc[year]['tovr'] =self.turnover[str(year)].values.mean()
+            # self.conclude.loc[year]['IC'] = self.IC[str(year)].values.mean()
         self.conclude.loc['All']={  'retn':self.pnl.values.sum()/self.start_money/len(years),
                                     'sharpe':(self.pnl.values.sum()/self.start_money/len(years)) / (
                                              (self.pnl.values / self.start_money).std() * np.sqrt(len(self.pnl))/np.sqrt(len(years))),
                                     'maxdd': self.maxdrawdown_value.values.max()/self.start_money,
-                                    'tovr':self.turnover.values.mean()
+                                    'tovr':self.turnover.mean()
+                                    # 'IC':self.IC.values.mean()
                                     }
 
 
+        # print(self.IC)
         self.ShowPerformance()
     def ShowPerformance(self):
         fig = plt.figure(figsize=(12,5))
@@ -120,3 +126,59 @@ class StrategyBacktest:
 
         print(self.conclude)
         plt.show()
+
+class FutureBacktest:
+    def __init__(self,commission=0.001,start_money=100000,freq='D',stock='Test',start_time='20100101',end_time = '20180210'):
+        self.commission = commission
+        self.start_money=start_money
+        self.freq = freq
+        data = pd.read_csv('data\\IF2015.1m.csv')
+        data['ttime'] = (data['date'] + ' ' + data['time']).map(
+            lambda x: datetime.datetime.strptime(x, '%Y-%m-%d %H:%M:%S'))
+        d = data.set_index('ttime')
+        del d['date']
+        del d['time']
+        self.data=d.resample(freq).first().dropna()
+        self.cash=0
+        self.open=[1,3,2,1,4,1,5,7]
+        self.account=[]
+        self.index=self.data.index
+        self.open=np.array(d.resample(freq).first().dropna()['open'].values)
+        self.high = np.array(d.resample(freq).max().dropna()['high'].values)
+        self.low = np.array(d.resample(freq).min().dropna()['low'].values)
+        self.close = np.array(d.resample(freq).last().dropna()['close'].values)
+        self.volume = np.array(d.resample(freq).sum().dropna()['volume'].values)
+    def GetPosition(self, bsig,ssig,csig):
+        self.bsig=np.array(bsig)
+        self.ssig=np.array(ssig)
+        self.csig=np.array(csig)
+        self.csig[-1]=1
+        self.position=[]
+        if (self.csig[0] == 0):
+            self.position.append(self.bsig[0] - self.ssig[0])
+        else:
+            self.position.append(0)
+        for i in np.arange(1,len(self.bsig)):
+            if(self.csig[i]==0):
+                self.position.append(self.position[i-1]+self.bsig[i]-self.ssig[i])
+            else:
+                self.position.append(0)
+        self.position=np.array(self.position)
+        return self.position
+    def GeneratePerformance(self,bsig,ssig,csig):
+        self.position=self.GetPosition(bsig,ssig,csig)
+        self.cash=[]
+        self.cash.append(self.start_money-self.position[0]*self.open[0])
+        for i in np.arange(1,len(bsig)):
+            self.cash.append(self.cash[i-1]-self.open[i]*(self.position[i]-self.position[i-1]))
+        self.cash=np.array(self.cash)
+        self.account=pd.DataFrame(self.position*self.open+self.cash,index=self.index)
+        self.ShowPerformance()
+        self.pnl=self.account.diff(1)
+        self.pnl.iloc[0]=0
+        self.pnl=pd.DataFrame(self.pnl,index=self.index)
+    def ShowPerformance(self):
+        fig = plt.figure(figsize=(12, 5))
+        plt.plot(self.account-self.start_money)
+        plt.show()
+
